@@ -51,7 +51,7 @@ public class DigestDispatcher {
     private final String serviceFullPath = serviceContext + servicePath;
 
     private final Class<DigestResponse> responseClass = DigestResponse.class;
-    
+
     public DigestResponse execute(DigestRequest digestRequest) {
         Map<String, String> md = entityProvider.getMetadata(new EntityReference(digestRequest.objectKey));
         long size = Long.valueOf(md.get("contentLength"));
@@ -59,12 +59,12 @@ public class DigestDispatcher {
         if (cachedServiceUrl != null) {
             return sender.send(cachedServiceUrl, digestRequest, responseClass);
         }
-        String basicServiceUrl = buildServiceUrl( "digest.adamsmolnik.com");
-        if (size < 50_000_000) {
+        String basicServiceUrl = buildServiceUrl("digest.adamsmolnik.com");
+        if (size < 150_000_000) {
             return sender.send(basicServiceUrl, digestRequest, responseClass);
         }
-        SetupParams sp = new SetupParams().withLabel("time-limited server instance for " + snr.getServiceName()).withInstanceType("t2.micro")
-                .withImageId("ami-e4ba1d8c").withServiceContext(serviceContext);
+        SetupParams sp = new SetupParams().withLabel("time-limited server instance for " + snr.getServiceName()).withInstanceType("t2.small")
+                .withImageId("ami-2e0ea946").withServiceContext(serviceContext);
         ServerInstance newInstance = sib.build(sp);
         String newServiceUrl = buildServiceUrl(newInstance.getPublicIpAddress() + ":8080");
         final DigestResponse response;
@@ -81,7 +81,7 @@ public class DigestDispatcher {
         newInstance.scheduleCleanup(10, TimeUnit.MINUTES);
         return response;
     }
-    
+
     private String buildServiceUrl(String serverAddress) {
         return "http://" + serverAddress + serviceFullPath;
     }
