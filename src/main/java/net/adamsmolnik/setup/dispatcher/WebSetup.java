@@ -8,7 +8,6 @@ import javax.servlet.annotation.WebListener;
 import net.adamsmolnik.control.dispatcher.DigestDispatcher;
 import net.adamsmolnik.endpoint.QueueEndpoint;
 import net.adamsmolnik.model.digest.DigestRequest;
-import net.adamsmolnik.setup.ServiceNameResolver;
 import net.adamsmolnik.util.Configuration;
 import net.adamsmolnik.util.Scheduler;
 
@@ -18,9 +17,6 @@ import net.adamsmolnik.util.Scheduler;
  */
 @WebListener("dispatcherSetup")
 public class WebSetup implements ServletContextListener {
-
-    @Inject
-    private ServiceNameResolver snr;
 
     @Inject
     private Configuration conf;
@@ -36,10 +32,8 @@ public class WebSetup implements ServletContextListener {
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
-        Map<String, String> confMap = conf.getServiceConfMap(snr.getServiceName());
-        queueEndpoint.handleJson((request) -> {
-            return dc.execute(request);
-        }, DigestRequest.class, confMap.get("queueIn"), confMap.get("queueOut"));
+        Map<String, String> confMap = conf.getServiceConfMap();
+        queueEndpoint.handleJson(request -> dc.execute(request), DigestRequest.class, confMap.get("queueIn"), confMap.get("queueOut"));
     }
 
     @Override

@@ -21,7 +21,6 @@ import net.adamsmolnik.newinstance.SetupParams;
 import net.adamsmolnik.newinstance.SetupParamsView;
 import net.adamsmolnik.sender.Sender;
 import net.adamsmolnik.sender.SendingParams;
-import net.adamsmolnik.setup.ServiceNameResolver;
 import net.adamsmolnik.util.Configuration;
 import net.adamsmolnik.util.LocalServiceUrlCache;
 import net.adamsmolnik.util.Log;
@@ -44,9 +43,6 @@ public class DigestDispatcher {
     private Log log;
 
     @Inject
-    private ServiceNameResolver snr;
-
-    @Inject
     private Configuration conf;
 
     @Inject
@@ -66,11 +62,13 @@ public class DigestDispatcher {
 
     private long sizeThreshold;
 
+    private String serviceName;
+
     @PostConstruct
     private void init() {
-        String sn = snr.getServiceName();
-        basicServerDomain = conf.getServiceValue(sn, "basicServerDomain");
-        sizeThreshold = Long.valueOf(conf.getServiceValue(sn, "sizeThreshold"));
+        serviceName = conf.getServiceName();
+        basicServerDomain = conf.getServiceValue("basicServerDomain");
+        sizeThreshold = Long.valueOf(conf.getServiceValue("sizeThreshold"));
         usePrivateOutboundAdresses = "true".equals(conf.getLocalValue("usePrivateOutboundAdresses"));
     }
 
@@ -85,8 +83,7 @@ public class DigestDispatcher {
         if (size < sizeThreshold) {
             return sender.send(basicServiceUrl, digestRequest, responseClass);
         }
-        SetupParams sp = new SetupParams()
-                .withLabel("time-limited server instance " + " (spawn by  " + Util.getLocalHost() + ") for " + snr.getServiceName())
+        SetupParams sp = new SetupParams().withLabel("time-limited server instance " + " (spawn by  " + Util.getLocalHost() + ") for " + serviceName)
                 .withInstanceType("t2.small").withImageId("ami-7623811e").withServiceContext(serviceContext)
                 .withUsePrivateOutboundAdresses(usePrivateOutboundAdresses);
         ServerInstance newInstance = sib.build(sp);
@@ -94,9 +91,7 @@ public class DigestDispatcher {
         final DigestResponse response;
         try {
             response = sender.trySending(newServiceUrl, digestRequest, responseClass, new SendingParams().withNumberOfAttempts(3)
-                    .withAttemptIntervalSecs(5).withLogExceptiomAttemptConsumer((message) -> {
-                        log.err(message);
-                    }));
+                    .withAttemptIntervalSecs(5).withLogExceptiomAttemptConsumer(log::err));
         } catch (Exception e) {
             log.err(e);
             throw new ServiceException(e);
