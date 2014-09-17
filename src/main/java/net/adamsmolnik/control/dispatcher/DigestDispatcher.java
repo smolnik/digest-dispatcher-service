@@ -48,6 +48,8 @@ public class DigestDispatcher {
     @Inject
     private Sender<DigestRequest, DigestResponse> sender;
 
+    private String serviceName;
+
     private String basicServerDomain;
 
     private final String serviceContext = "/digest-service-no-limit";
@@ -58,18 +60,13 @@ public class DigestDispatcher {
 
     private final Class<DigestResponse> responseClass = DigestResponse.class;
 
-    private boolean usePrivateOutboundAdresses;
-
     private long sizeThreshold;
-
-    private String serviceName;
 
     @PostConstruct
     private void init() {
         serviceName = conf.getServiceName();
         basicServerDomain = conf.getServiceValue("basicServerDomain");
         sizeThreshold = Long.valueOf(conf.getServiceValue("sizeThreshold"));
-        usePrivateOutboundAdresses = "true".equals(conf.getLocalValue("usePrivateOutboundAdresses"));
     }
 
     public DigestResponse execute(DigestRequest digestRequest) {
@@ -84,21 +81,19 @@ public class DigestDispatcher {
             return sender.send(basicServiceUrl, digestRequest, responseClass);
         }
         SetupParams sp = new SetupParams().withLabel("time-limited server instance " + " (spawn by  " + Util.getLocalHost() + ") for " + serviceName)
-                .withInstanceType("t2.small").withImageId("ami-7623811e").withServiceContext(serviceContext)
-                .withUsePrivateOutboundAdresses(usePrivateOutboundAdresses);
-        ServerInstance newInstance = sib.build(sp);
-        String newServiceUrl = buildServiceUrl(usePrivateOutboundAdresses ? newInstance.getPrivateIpAddress() : newInstance.getPublicIpAddress());
-        final DigestResponse response;
-        try {
-            response = sender.trySending(newServiceUrl, digestRequest, responseClass, new SendingParams().withNumberOfAttempts(3)
+                .withInstanceType("t2.small").withImageId("ami-7623811e").withServiceContext(serviceContext);
+        try (ServerInstance newInstance = sib.build(sp)) {
+            String newServiceUrl = buildServiceUrl(newInstance.getPublicIpAddress());
+
+            DigestResponse response = sender.trySending(newServiceUrl, digestRequest, responseClass, new SendingParams().withNumberOfAttempts(3)
                     .withAttemptIntervalSecs(5).withLogExceptiomAttemptConsumer(log::err));
+            cache.put(serviceFullPath, newServiceUrl);
+            newInstance.scheduleCleanup(10, TimeUnit.MINUTES);
+            return response;
         } catch (Exception e) {
             log.err(e);
             throw new ServiceException(e);
         }
-        cache.put(serviceFullPath, newServiceUrl);
-        newInstance.scheduleCleanup(10, TimeUnit.MINUTES);
-        return response;
     }
 
     private long fetchObjectSize(DigestRequest digestRequest) {
