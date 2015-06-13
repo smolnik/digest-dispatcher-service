@@ -80,15 +80,17 @@ public class DigestDispatcher {
         if (size < sizeThreshold) {
             return sender.send(basicServiceUrl, digestRequest, responseClass);
         }
-        SetupParams sp = new SetupParams().withLabel("time-limited server instance " + " (spawn by  " + Util.getLocalHost() + ") for " + serviceName)
-                .withInstanceType("t2.small").withImageId("ami-7623811e").withServiceContext(serviceContext);
+        SetupParams sp = new SetupParams().withLabel("time-limited server instance " + " (spawn by  " + Util.getLocalHost() + ") for " + serviceName).withInstanceType("t2.small")
+                .withImageId("ami-7623811e").withServiceContext(serviceContext);
         try (ServerInstance newInstance = sib.build(sp)) {
             String newServiceUrl = buildServiceUrl(newInstance.getPublicIpAddress());
 
-            DigestResponse response = sender.trySending(newServiceUrl, digestRequest, responseClass, new SendingParams().withNumberOfAttempts(3)
-                    .withAttemptIntervalSecs(5).withLogExceptiomAttemptConsumer(log::err));
+            DigestResponse response = sender.trySending(newServiceUrl, digestRequest, responseClass, new SendingParams().withNumberOfAttempts(3).withAttemptIntervalSecs(5)
+                    .withLogExceptiomAttemptConsumer(log::err));
             cache.put(serviceFullPath, newServiceUrl);
-            newInstance.scheduleCleanup(10, TimeUnit.MINUTES);
+            newInstance.scheduleCleanup(15, TimeUnit.MINUTES, () -> {
+                cache.remove(serviceFullPath);
+            });
             return response;
         } catch (Exception e) {
             log.err(e);
@@ -100,8 +102,7 @@ public class DigestDispatcher {
         Client client = ClientBuilder.newClient();
         String fetchSizeUrl;
         try {
-            fetchSizeUrl = buildServiceContextUrl(basicServerDomain) + "/ds/objects/"
-                    + URLEncoder.encode(digestRequest.objectKey, StandardCharsets.UTF_8.toString());
+            fetchSizeUrl = buildServiceContextUrl(basicServerDomain) + "/ds/objects/" + URLEncoder.encode(digestRequest.objectKey, StandardCharsets.UTF_8.toString());
         } catch (UnsupportedEncodingException unsupportedEx) {
             throw new ServiceException(unsupportedEx);
         }
@@ -110,8 +111,7 @@ public class DigestDispatcher {
         if (statusType.getStatusCode() == Status.OK.getStatusCode()) {
             return Long.valueOf(sizeResponse.readEntity(String.class));
         } else {
-            throw new ServiceException("Retrieving the size with url " + fetchSizeUrl + " failed with status " + statusType + " and content "
-                    + sizeResponse.readEntity(String.class));
+            throw new ServiceException("Retrieving the size with url " + fetchSizeUrl + " failed with status " + statusType + " and content " + sizeResponse.readEntity(String.class));
         }
     }
 
